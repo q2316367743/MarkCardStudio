@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import AppIcon from "../AppIcon.vue";
+import { assetUrl } from "../../utils/asset.js";
 
 const props = defineProps({
   backgroundType: {
@@ -123,21 +124,21 @@ const gradients = [
 
 // High quality wallpapers from local space_1..10 and desktop_1..5
 const wallpapers = [
-  { name: "太空壁纸 1", url: "/wallpapers/space-1.jpg" },
-  { name: "太空壁纸 2", url: "/wallpapers/space-2.jpg" },
-  { name: "太空壁纸 3", url: "/wallpapers/space-3.jpg" },
-  { name: "太空壁纸 4", url: "/wallpapers/space-4.jpg" },
-  { name: "太空壁纸 5", url: "/wallpapers/space-5.jpg" },
-  { name: "太空壁纸 6", url: "/wallpapers/space-6.jpg" },
-  { name: "太空壁纸 7", url: "/wallpapers/space-7.jpg" },
-  { name: "太空壁纸 8", url: "/wallpapers/space-8.jpg" },
-  { name: "太空壁纸 9", url: "/wallpapers/space-9.jpg" },
-  { name: "太空壁纸 10", url: "/wallpapers/space-10.jpg" },
-  { name: "桌面壁纸 1", url: "/wallpapers/desktop-1.jpg" },
-  { name: "桌面壁纸 2", url: "/wallpapers/desktop-2.jpg" },
-  { name: "桌面壁纸 3", url: "/wallpapers/desktop-3.jpg" },
-  { name: "桌面壁纸 4", url: "/wallpapers/desktop-4.jpg" },
-  { name: "桌面壁纸 5", url: "/wallpapers/desktop-5.jpg" },
+  { name: "太空壁纸 1", url: assetUrl("wallpapers/space-1.jpg") },
+  { name: "太空壁纸 2", url: assetUrl("wallpapers/space-2.jpg") },
+  { name: "太空壁纸 3", url: assetUrl("wallpapers/space-3.jpg") },
+  { name: "太空壁纸 4", url: assetUrl("wallpapers/space-4.jpg") },
+  { name: "太空壁纸 5", url: assetUrl("wallpapers/space-5.jpg") },
+  { name: "太空壁纸 6", url: assetUrl("wallpapers/space-6.jpg") },
+  { name: "太空壁纸 7", url: assetUrl("wallpapers/space-7.jpg") },
+  { name: "太空壁纸 8", url: assetUrl("wallpapers/space-8.jpg") },
+  { name: "太空壁纸 9", url: assetUrl("wallpapers/space-9.jpg") },
+  { name: "太空壁纸 10", url: assetUrl("wallpapers/space-10.jpg") },
+  { name: "桌面壁纸 1", url: assetUrl("wallpapers/desktop-1.jpg") },
+  { name: "桌面壁纸 2", url: assetUrl("wallpapers/desktop-2.jpg") },
+  { name: "桌面壁纸 3", url: assetUrl("wallpapers/desktop-3.jpg") },
+  { name: "桌面壁纸 4", url: assetUrl("wallpapers/desktop-4.jpg") },
+  { name: "桌面壁纸 5", url: assetUrl("wallpapers/desktop-5.jpg") },
 ];
 
 function handleSwitchTab(modeId) {

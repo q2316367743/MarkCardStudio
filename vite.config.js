@@ -2,31 +2,21 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 
-const host = process.env.TAURI_DEV_HOST;
-
-// https://vite.dev/config/
-export default defineConfig(async () => ({
+/**
+ * base 必须是 './'：插件窗口用 plugin://<id>/ui/index.html 加载，
+ * 以 / 开头的资源路径会指到包根，dashou-plugin build 会直接报错拦下。
+ * 端口与 src-dashou/plugin.json 的 build.devUrl 对应（5177 避开工作区其它插件）。
+ */
+export default defineConfig({
+  base: "./",
   plugins: [vue(), tailwindcss()],
-
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-  //
-  // 1. prevent Vite from obscuring rust errors
-  clearScreen: false,
-  // 2. tauri expects a fixed port, fail if that port is not available
-  server: {
-    port: 1420,
-    strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
-          protocol: "ws",
-          host,
-          port: 1421,
-        }
-      : undefined,
-    watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
-    },
+  build: {
+    // mermaid / echarts 体积较大，拆开可以让首屏先跑起来
+    chunkSizeWarningLimit: 2600,
   },
-}));
+  server: {
+    port: 5177,
+    strictPort: true,
+    watch: { ignored: ["**/src-dashou/**"] },
+  },
+});

@@ -1,18 +1,39 @@
-import { invoke } from "@tauri-apps/api/core";
 import { getFontEmbedCSS, toCanvas } from "html-to-image";
 import { jsPDF } from "jspdf";
 import { createApp, nextTick } from "vue";
+import { nativeFetch } from "@dashou/api";
 import CardArtwork from "../components/preview/CardArtwork.vue";
 import { renderMermaidDiagrams, renderEChartsDiagrams } from "./useContentParser.js";
 import * as echarts from "echarts";
 import { i18n } from "../i18n/index.js";
+import {
+  isHostAvailable,
+  openExportFolder as openExportFolderInHost,
+  pickExportFolder,
+  resolveRemoteImage,
+  saveExportFile,
+} from "../native/index.js";
 
 function t(key, params) {
   return i18n.global.t(key, params);
 }
 
-function isTauriRuntime() {
-  return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
+/**
+ * 宿主注入脚本会把 window.fetch 换成走主进程的实现，只认 http 白名单。
+ * html-to-image 内部要读包内样式表与字体（plugin://），这些请求必须走原生 fetch，
+ * 而页面的 CSP 已经放行 connect-src plugin:。导出期间临时换回来，结束立即还原。
+ */
+async function withNativeFetch(task) {
+  if (!nativeFetch || typeof window === "undefined" || window.fetch === nativeFetch) {
+    return task();
+  }
+  const patchedFetch = window.fetch;
+  window.fetch = nativeFetch;
+  try {
+    return await task();
+  } finally {
+    window.fetch = patchedFetch;
+  }
 }
 
 export function useCardExport({
@@ -69,10 +90,10 @@ export function useCardExport({
         ? [allPages[activePageIndex.value] || allPages[0]]
         : allPages;
 
-      if (!targetFolder && isTauriRuntime()) {
+      if (!targetFolder && isHostAvailable()) {
         exportMessage.value = t("runtime.chooseExportFolder");
         try {
-          const selectedFolder = await invoke("pick_export_folder");
+          const selectedFolder = await pickExportFolder(exportPath?.value);
           if (!selectedFolder) {
             exportMessage.value = t("runtime.exportCancelled");
             return;
@@ -114,13 +135,13 @@ export function useCardExport({
       throw new Error(t("runtime.binaryFailed"));
     }
 
-    if (!isTauriRuntime()) {
+    if (!isHostAvailable()) {
       downloadBlob(blob, filename);
       return null;
     }
 
     try {
-      const savedPath = await invoke("save_export_file", {
+      const savedPath = await saveExportFile({
         folderPath: targetFolder || "",
         subfolderName: outputFolderName,
         fileName: filename,
@@ -131,7 +152,7 @@ export function useCardExport({
       throw new Error(t("runtime.writeFailed", { error: err?.message || err }));
     }
 
-    throw new Error(t("runtime.writeFailed", { error: "No output path returned" }));
+    throw new Error(t("runtime.writeFailed", { error: t("runtime.noOutputPath") }));
   }
 
   async function exportAsImages(pageList, platform, quality, themeClass, isTransparent, bgHex, bgType, bgVal, ext, targetFolder, outputFolderName, isTopLeft, isTopRight, isBottomLeft, isBottomRight) {
@@ -324,7 +345,7 @@ export function useCardExport({
 
   async function openOutputFolder(targetPath) {
     try {
-      await invoke("open_export_folder", { path: targetPath || exportPath?.value || "" });
+      await openExportFolderInHost(targetPath || exportPath?.value || "");
     } catch {
       // ignore fallback
     }
@@ -421,7 +442,7 @@ async function renderPageToCanvas(page, width, height, themeClass, isTransparent
     if (document.fonts?.ready) {
       await document.fonts.ready;
     }
-    const discoveredFontCss = await rasterizeMathForExport(posterNode);
+    const discoveredFontCss = await withNativeFetch(() => rasterizeMathForExport(posterNode));
     const fontEmbedCSS = [discoveredFontCss, customFontEmbedCss]
       .filter(Boolean)
       .join("\n");
@@ -481,7 +502,7 @@ async function renderPageToCanvas(page, width, height, themeClass, isTransparent
 
     let canvas;
     try {
-      canvas = await toCanvas(posterNode, captureOptions);
+      canvas = await withNativeFetch(() => toCanvas(posterNode, captureOptions));
     } finally {
       echartsImages.forEach((image, index) => {
         image.style.opacity = echartsImageOpacities[index];
@@ -996,21 +1017,25 @@ function extractCssUrl(backgroundImage) {
 async function loadImageSourceAsDataUrl(source) {
   const absoluteUrl = new URL(source, window.location.href).href;
 
-  try {
-    const response = await fetch(absoluteUrl, { cache: "force-cache", mode: "cors" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const blob = await response.blob();
-    if (blob.type && !blob.type.startsWith("image/")) {
-      throw new Error(`Unexpected content type: ${blob.type}`);
+  // 包内资源与 dev server 的同源资源只能用原生 fetch；替换过的 window.fetch 只认 http 白名单
+  const fetcher = nativeFetch || (typeof fetch === "function" ? fetch : null);
+  if (fetcher) {
+    try {
+      const response = await fetcher(absoluteUrl, { cache: "force-cache" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      if (blob.type && !blob.type.startsWith("image/")) {
+        throw new Error(`Unexpected content type: ${blob.type}`);
+      }
+      return await blobToDataUrl(blob);
+    } catch (browserError) {
+      if (!isHostAvailable() || !/^https?:/i.test(absoluteUrl)) throw browserError;
     }
-    return await blobToDataUrl(blob);
-  } catch (browserError) {
-    if (!isTauriRuntime() || !/^https?:/i.test(absoluteUrl)) throw browserError;
-
-    const resolved = await invoke("resolve_remote_image", { url: absoluteUrl });
-    if (!resolved?.dataUrl) throw browserError;
-    return resolved.dataUrl;
   }
+
+  const resolved = await resolveRemoteImage(absoluteUrl);
+  if (!resolved?.dataUrl) throw new Error(t("runtime.binaryFailed"));
+  return resolved.dataUrl;
 }
 
 /** Replace cover SVG sources with PNG data before the final DOM capture. */

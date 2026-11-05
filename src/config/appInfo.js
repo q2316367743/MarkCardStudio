@@ -1,6 +1,6 @@
 export const APP_INFO = {
   name: "MarkCard Studio",
-  version: "0.1.5",
+  version: "1.0.0",
   license: "GNU GPL v3.0",
   author: {
     name: "xiaobin",

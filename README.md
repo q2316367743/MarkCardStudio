@@ -8,9 +8,9 @@
     <a href="https://markcard.woollypix.cn/">Official Website</a>
   </p>
   <p>
-    <img alt="Version" src="https://img.shields.io/badge/version-0.1.5-6d28d9" />
+    <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-6d28d9" />
     <img alt="Vue 3" src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white" />
-    <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white" />
+    <img alt="DASHOU plugin" src="https://img.shields.io/badge/DASHOU-plugin-24c8db" />
     <img alt="License GPL v3" src="https://img.shields.io/badge/license-GPL--3.0-blue" />
   </p>
 </div>
@@ -62,7 +62,7 @@ The files in [`imgs/EN`](imgs/EN) are real card exports produced by MarkCard Stu
 
 | Layer | Technology |
 | --- | --- |
-| Desktop shell | Tauri 2, Rust |
+| Plugin host | 搭手（da-shou）plugin: Node core + sandboxed window |
 | Interface | Vue 3, JavaScript, Vite 6, vue-i18n |
 | Styling | Tailwind CSS 4, DaisyUI, theme-specific CSS |
 | Editor | CodeMirror 6 |
@@ -152,9 +152,8 @@ MarkCard Studio automatically infers optimal chart heights based on chart comple
 
 ### Prerequisites
 
-- Node.js 22.12.0 or newer (the release workflow uses 22.12.0)
-- [pnpm](https://pnpm.io/)
-- For the desktop app: a Rust toolchain and the [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system
+- Node.js 20 or newer and [pnpm](https://pnpm.io/)
+- The 搭手 desktop client, for loading a development plugin or installing the package
 
 ### Install
 
@@ -164,20 +163,21 @@ cd MarkCardStudio
 pnpm install
 ```
 
-### Run the desktop app
+### Develop inside 搭手
 
 ```bash
-pnpm tauri dev
+pnpm plugin:dev
 ```
 
-### Build
+Keep that terminal running, then open 搭手 → 插件管理 → 开发者工具 → 添加项目 and pick the **`src-dashou/`** folder (not the repository root). After changing the core or `plugin.json`, press **重新加载** in the host; the UI hot-reloads through Vite.
+
+### Build a plugin package
 
 ```bash
-# Build native application bundles
-pnpm tauri build
+pnpm plugin:build
 ```
 
-Native bundle types depend on the host operating system and installed Tauri prerequisites.
+The installable package is written to `src-dashou/dashou-dist/com.dashou.markcard-<version>.dsp`; install it from 插件管理 → 安装插件.
 
 ## How It Works
 
@@ -196,9 +196,15 @@ src/
 ├── composables/         Document state, parsing, pagination, and export
 ├── config/              Theme metadata and cover sticker mappings
 └── styles/themes/       Shared card styles and individual themes
-src-tauri/
-├── src/files.rs         Native Markdown, image, folder, and export commands
-└── tauri.conf.json      Desktop application and bundle configuration
+src/native/              Host bridge: the only exit point for plugin capabilities
+src/utils/               Shared page helpers (asset URL resolution)
+src-dashou/
+├── plugin.json          Plugin manifest: id, window, commands, capabilities
+├── index.ts             Core entry: API table, commands, pending document queue
+├── documents.ts         Markdown dialogs, reads, and writes
+├── exports.ts           Export folder picking and file writes
+├── images.ts            Local image resolution and remote image download
+└── fonts.ts             Custom font library
 public/
 ├── stickers/openmoji/   Bundled OpenMoji sticker assets
 └── wallpapers/          Local background images
@@ -209,7 +215,7 @@ Contributor and coding-agent guidance lives in [`AGENTS.md`](AGENTS.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. Keep changes focused, preserve preview/export visual parity, and run both the frontend build and Rust checks for changes that cross the desktop boundary. See [`AGENTS.md`](AGENTS.md) for the repository's architecture and validation checklist.
+Issues and pull requests are welcome. Keep changes focused, preserve preview/export visual parity, and run `pnpm typecheck`, `pnpm build`, and `pnpm plugin:build` before handing off. See [`AGENTS.md`](AGENTS.md) for the repository's architecture and validation checklist.
 
 ## Asset Attribution
 

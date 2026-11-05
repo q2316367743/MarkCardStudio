@@ -1,8 +1,7 @@
 <script setup>
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { isTauri } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { isHostAvailable, openExternal } from "../native/index.js";
 import AppIcon from "./AppIcon.vue";
 
 const props = defineProps({
@@ -60,10 +59,10 @@ const isErrorMessage = computed(() => {
 const SPONSOR_URL = "https://lingxiangtools.top/?utm_source=markcard_studio&utm_medium=statusbar_sponsor&utm_campaign=sponsor_link&ref=markcard_studio";
 
 async function handleSponsorClick(event) {
-  if (!isTauri()) return;
+  if (!isHostAvailable()) return;
   event.preventDefault();
   try {
-    await openUrl(SPONSOR_URL);
+    await openExternal(SPONSOR_URL);
   } catch (error) {
     console.error("Failed to open sponsor URL:", error);
   }

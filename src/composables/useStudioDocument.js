@@ -1,5 +1,13 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  isHostAvailable,
+  pickExportFolder,
+  pickMarkdownFile,
+  pickSavePath,
+  readMarkdownFile,
+  resolveLocalImage,
+  writeMarkdownFile,
+} from "../native/index.js";
 import { parseBlocks, blocksToPreviewText } from "./useContentParser.js";
 import { useCustomFonts } from "./useCustomFonts.js";
 import { createMeasuredPaginationSession } from "./useMeasuredPagination.js";
@@ -663,12 +671,14 @@ export function useStudioDocument() {
 
   async function openExportFolderPicker() {
     try {
-      const selected = await invoke("pick_export_folder");
+      const selected = await pickExportFolder(exportPath.value);
       if (selected) {
         exportPath.value = selected;
         return selected;
       }
     } catch {
+      // 页面独立运行时（非插件窗口）没有系统选择框，退回手动输入
+      if (isHostAvailable()) return null;
       const manual = prompt(t("publish.pathPrompt"), exportPath.value);
       if (manual && manual.trim()) {
         exportPath.value = manual.trim();
@@ -966,9 +976,10 @@ export function useStudioDocument() {
   async function openDocumentFromDialog() {
     isLoadingDocument.value = true;
     try {
-      const file = await invoke("open_markdown_file");
-      if (!file) return null;
+      const path = await pickMarkdownFile();
+      if (!path) return null;
 
+      const file = await readMarkdownFile(path);
       await loadDocumentFromContent(file);
       return file;
     } catch (err) {
@@ -985,8 +996,12 @@ export function useStudioDocument() {
         return null;
       }
 
-      const result = await invoke("save_markdown_file", {
-        path: sourcePath.value || null,
+      // 选择框放在窗口侧：用户在对话框里停留多久都不会触发 core 的调用超时
+      const targetPath = sourcePath.value || (await pickSavePath());
+      if (!targetPath) return null;
+
+      const result = await writeMarkdownFile({
+        path: targetPath,
         content: markdownSource.value,
       });
 
@@ -1445,7 +1460,7 @@ async function tryResolveImage(target, basePath) {
 
   const promise = (async () => {
     try {
-      const resolved = await invoke("resolve_local_image", {
+      const resolved = await resolveLocalImage({
         path: raw,
         basePath: basePath || null,
       });

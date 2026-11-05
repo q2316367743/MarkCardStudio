@@ -8,9 +8,9 @@
     <a href="https://markcard.woollypix.cn/">官方网站</a>
   </p>
   <p>
-    <img alt="版本" src="https://img.shields.io/badge/version-0.1.5-6d28d9" />
+    <img alt="版本" src="https://img.shields.io/badge/version-1.0.0-6d28d9" />
     <img alt="Vue 3" src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white" />
-    <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white" />
+    <img alt="搭手插件" src="https://img.shields.io/badge/DASHOU-plugin-24c8db" />
     <img alt="GPL v3 许可证" src="https://img.shields.io/badge/license-GPL--3.0-blue" />
   </p>
 </div>
@@ -72,7 +72,7 @@ MarkCard Studio 是一款面向内容创作者和知识分享者的本地优先�
 
 | 层级 | 技术 |
 | --- | --- |
-| 桌面端 | Tauri 2、Rust |
+| 插件宿主 | 搭手（da-shou）插件：Node 后台 + 沙箱窗口 |
 | 界面 | Vue 3、JavaScript、Vite 6、vue-i18n |
 | 样式 | Tailwind CSS 4、DaisyUI、主题 CSS |
 | 编辑器 | CodeMirror 6 |
@@ -162,9 +162,8 @@ MarkCard Studio 原生支持在 Markdown 中直接使用 `echarts` 代码块嵌�
 
 ### 环境要求
 
-- Node.js 22.12.0 或更高版本（发布工作流使用 22.12.0）
-- [pnpm](https://pnpm.io/)
-- 运行桌面端还需要 Rust 工具链，以及当前操作系统对应的 [Tauri 2 系统依赖](https://v2.tauri.app/start/prerequisites/)
+- Node.js 20 或更高版本，以及 [pnpm](https://pnpm.io/)
+- 搭手桌面客户端，用于加载开发版插件或安装插件包
 
 ### 安装
 
@@ -174,20 +173,21 @@ cd MarkCardStudio
 pnpm install
 ```
 
-### 运行桌面应用
+### 在搭手里开发
 
 ```bash
-pnpm tauri dev
+pnpm plugin:dev
 ```
 
-### 构建
+保持这个终端常驻，然后在搭手 → 插件管理 → 开发者工具 → 添加项目，选择 **`src-dashou/`**（不是仓库根目录）。改完 core 或 `plugin.json` 后点「重新加载」；界面由 Vite 热更新。
+
+### 打包插件
 
 ```bash
-# 构建原生应用安装包
-pnpm tauri build
+pnpm plugin:build
 ```
 
-可生成的安装包类型取决于当前操作系统和已安装的 Tauri 系统依赖。
+安装包输出到 `src-dashou/dashou-dist/com.dashou.markcard-<版本>.dsp`，在「插件管理 → 安装插件」里选择它即可。
 
 ## 使用流程
 
@@ -206,9 +206,15 @@ src/
 ├── composables/         文档状态、解析、分页与导出逻辑
 ├── config/              主题元数据和封面贴纸映射
 └── styles/themes/       卡片公共样式与各套主题样式
-src-tauri/
-├── src/files.rs         Markdown、图片、目录和导出的原生命令
-└── tauri.conf.json      桌面应用与打包配置
+src/native/              宿主能力出口：窗口侧唯一调用入口
+src/utils/               页面公共工具（资源地址解析）
+src-dashou/
+├── plugin.json          插件清单：id、窗口、命令、能力
+├── index.ts             后台入口：API 表、命令、待打开稿件队列
+├── documents.ts         Markdown 选择框、读写
+├── exports.ts           导出目录选择与文件写入
+├── images.ts            本地图片解析与远程图片下载
+└── fonts.ts             自定义字体库
 public/
 ├── stickers/openmoji/   内置 OpenMoji 贴纸资源
 └── wallpapers/          本地背景图片

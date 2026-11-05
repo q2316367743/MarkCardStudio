@@ -1,4 +1,6 @@
-const STICKER_ROOT = "/stickers/openmoji";
+import { assetUrl } from "../utils/asset.js";
+
+const STICKER_ROOT = assetUrl("stickers/openmoji");
 
 const COVER_STICKERS = {
   "theme-warm": [

@@ -1,14 +1,17 @@
-import { invoke } from "@tauri-apps/api/core";
 import { computed, ref } from "vue";
+import {
+  deleteCustomFont as deleteFontFromHost,
+  importCustomFont as importFontFromHost,
+  isHostAvailable,
+  listCustomFonts,
+  pickFontFile,
+  readCustomFont,
+} from "../native/index.js";
 
 const customFonts = ref([]);
 const isLoadingCustomFonts = ref(false);
 const customFontError = ref("");
 const loadedFonts = new Map();
-
-function isTauriRuntime() {
-  return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
-}
 
 function upsertFont(font) {
   if (!font?.id) return;
@@ -29,7 +32,7 @@ function createFontEmbedCss(font, dataUrl) {
 }
 
 async function refreshCustomFonts() {
-  if (!isTauriRuntime()) {
+  if (!isHostAvailable()) {
     customFonts.value = [];
     return [];
   }
@@ -37,7 +40,7 @@ async function refreshCustomFonts() {
   isLoadingCustomFonts.value = true;
   customFontError.value = "";
   try {
-    const fonts = await invoke("list_custom_fonts");
+    const fonts = await listCustomFonts();
     customFonts.value = Array.isArray(fonts) ? fonts : [];
     return customFonts.value;
   } catch (error) {
@@ -49,11 +52,14 @@ async function refreshCustomFonts() {
 }
 
 async function importCustomFont() {
-  if (!isTauriRuntime()) return null;
+  if (!isHostAvailable()) return null;
   isLoadingCustomFonts.value = true;
   customFontError.value = "";
   try {
-    const font = await invoke("import_custom_font");
+    const path = await pickFontFile();
+    if (!path) return null;
+
+    const font = await importFontFromHost(path);
     if (!font) return null;
     upsertFont(font);
     await ensureCustomFontLoaded(font.id);
@@ -67,14 +73,14 @@ async function importCustomFont() {
 }
 
 async function ensureCustomFontLoaded(fontId) {
-  if (!fontId || fontId === "theme-default" || !isTauriRuntime()) return null;
+  if (!fontId || fontId === "theme-default" || !isHostAvailable()) return null;
   if (loadedFonts.has(fontId)) return loadedFonts.get(fontId);
 
-  const result = await invoke("read_custom_font", { fontId });
+  const result = await readCustomFont(fontId);
   const font = result?.font;
   const dataUrl = result?.dataUrl;
   if (!font?.id || !dataUrl) {
-    throw new Error("Custom font data is incomplete");
+    throw new Error("字体数据不完整，请重新导入。");
   }
 
   const source = `url("${dataUrl}") format("${font.format}")`;
@@ -99,11 +105,11 @@ async function ensureCustomFontLoaded(fontId) {
 }
 
 async function deleteCustomFont(fontId) {
-  if (!fontId || fontId === "theme-default" || !isTauriRuntime()) return;
+  if (!fontId || fontId === "theme-default" || !isHostAvailable()) return;
   isLoadingCustomFonts.value = true;
   customFontError.value = "";
   try {
-    await invoke("delete_custom_font", { fontId });
+    await deleteFontFromHost(fontId);
     const loaded = loadedFonts.get(fontId);
     loaded?.faces?.forEach((face) => document.fonts.delete(face));
     loadedFonts.delete(fontId);
@@ -121,7 +127,7 @@ export function useCustomFonts() {
     customFonts,
     isLoadingCustomFonts,
     customFontError,
-    isCustomFontRuntimeAvailable: computed(() => isTauriRuntime()),
+    isCustomFontRuntimeAvailable: computed(() => isHostAvailable()),
     refreshCustomFonts,
     importCustomFont,
     ensureCustomFontLoaded,

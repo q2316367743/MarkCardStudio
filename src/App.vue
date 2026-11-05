@@ -1,9 +1,7 @@
 <script setup>
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@dashou/api";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import AppCloseConfirmDialog from "./components/AppCloseConfirmDialog.vue";
-import AppUpdateDialog from "./components/AppUpdateDialog.vue";
 import AppIcon from "./components/AppIcon.vue";
 import AppStatusbar from "./components/AppStatusbar.vue";
 import AppSettingsDialog from "./components/AppSettingsDialog.vue";
@@ -14,8 +12,8 @@ import PreviewPanel from "./components/PreviewPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import { useCardExport } from "./composables/useCardExport";
 import { useStudioDocument } from "./composables/useStudioDocument";
-import { useUpdater } from "./composables/useUpdater";
 import { useAppPreferences } from "./i18n/index.js";
+import { isHostAvailable, onPendingDocument, takePendingDocument } from "./native/index.js";
 
 const exportFormats = ["PNG", "JPG", "PDF", "长图(PNG)"];
 const settingTabs = ["平台", "分页", "背景", "字体", "标头"];
@@ -123,8 +121,9 @@ const layoutStyle = computed(() => ({
           : "minmax(0,1fr)",
 }));
 let removeCloseRequestedListener = null;
-let removeExitRequestedListener = null;
+let removePendingDocumentListener = null;
 let appIsUnmounted = false;
+let appWindow = null;
 const { exportCurrentPage } = useCardExport({
   activePageIndex,
   pages,
@@ -216,11 +215,16 @@ async function confirmApplicationClose() {
 
   isClosingApplication.value = true;
   try {
-    await invoke("exit_application");
+    if (appWindow) {
+      await appWindow.destroy();
+      return;
+    }
   } catch (error) {
-    console.error("Failed to close the application:", error);
-    isClosingApplication.value = false;
+    console.error("Failed to close the window:", error);
   }
+
+  isClosingApplication.value = false;
+  closeDialogOpen.value = false;
 }
 
 function openLeftDrawer() {
@@ -243,39 +247,50 @@ watch([leftSidebarDocked, rightSidebarDocked], ([leftDocked, rightDocked]) => {
   }
 });
 
-const { checkForUpdates } = useUpdater();
+/** 从搜索条「用 MarkCard 打开这些 Markdown」送来的稿件 */
+async function consumePendingDocument() {
+  if (!isHostAvailable()) return;
+  try {
+    const document = await takePendingDocument();
+    if (!document?.content) return;
+    await loadDocumentFromContent(document);
+  } catch (error) {
+    console.error("Failed to open the queued document:", error);
+  }
+}
 
 onMounted(async () => {
   handleResize();
   window.addEventListener("resize", handleResize);
   window.addEventListener("keydown", handleGlobalKeydown);
 
-  setTimeout(() => {
-    checkForUpdates(true);
-  }, 2000);
-
-  if (!isTauri()) {
+  if (!isHostAvailable()) {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return;
   }
 
-  const appWindow = getCurrentWindow();
-  const [removeCloseRequested, removeExitRequested] = await Promise.all([
-    appWindow.onCloseRequested((event) => {
-      event.preventDefault();
-      requestApplicationClose();
-    }),
-    appWindow.listen("app-exit-requested", requestApplicationClose),
-  ]);
+  appWindow = getCurrentWindow();
+
+  // 先登记后续通知，再取已经排队的那一份，两种时序都不会丢稿件
+  const removePendingListener = await onPendingDocument(consumePendingDocument);
+  if (appIsUnmounted) {
+    removePendingListener();
+    return;
+  }
+  removePendingDocumentListener = removePendingListener;
+  await consumePendingDocument();
+
+  const removeCloseRequested = await appWindow.onCloseRequested((event) => {
+    event.preventDefault();
+    requestApplicationClose();
+  });
 
   if (appIsUnmounted) {
     removeCloseRequested();
-    removeExitRequested();
     return;
   }
 
   removeCloseRequestedListener = removeCloseRequested;
-  removeExitRequestedListener = removeExitRequested;
 });
 
 onBeforeUnmount(() => {
@@ -284,7 +299,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", handleGlobalKeydown);
   window.removeEventListener("beforeunload", handleBeforeUnload);
   removeCloseRequestedListener?.();
-  removeExitRequestedListener?.();
+  removePendingDocumentListener?.();
 });
 </script>
 
@@ -448,7 +463,6 @@ onBeforeUnmount(() => {
       @confirm="confirmApplicationClose"
     />
     <AppSettingsDialog :open="settingsDialogOpen" @close="settingsDialogOpen = false" />
-    <AppUpdateDialog />
     <AppStatusbar
       :canvas-size-label="canvasSizeLabel"
       :pages-length="pages.length"

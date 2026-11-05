@@ -1,8 +1,8 @@
 <script setup>
-import { invoke } from "@tauri-apps/api/core";
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import AppIcon from "../AppIcon.vue";
+import { isHostAvailable, openExportFolder, pickExportFolder } from "../../native/index.js";
 
 const props = defineProps({
   exportFormats: {
@@ -61,14 +61,14 @@ const mainButtonText = computed(() => {
 });
 
 async function handleSelectFolder() {
-  try {
-    const selected = await invoke("pick_export_folder");
-    if (selected) {
-      emit("set-export-path", selected);
-      return;
+  if (isHostAvailable()) {
+    try {
+      const selected = await pickExportFolder(props.exportPath);
+      if (selected) emit("set-export-path", selected);
+    } catch {
+      // 选择框失败时保持原路径，不打断导出
     }
-  } catch {
-    // fallback if not running in Tauri
+    return;
   }
   const nextPath = prompt(t("publish.pathPrompt"), props.exportPath);
   if (nextPath && nextPath.trim()) {
@@ -77,7 +77,7 @@ async function handleSelectFolder() {
 }
 async function handleOpenExportFolder() {
   try {
-    await invoke("open_export_folder", { path: props.exportPath });
+    await openExportFolder(props.exportPath);
   } catch {
     // ignore
   }
